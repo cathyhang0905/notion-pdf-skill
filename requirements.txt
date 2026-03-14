@@ -1,0 +1,4 @@
+notion-client==2.2.1
+requests
+PyMuPDF
+python-dotenv
