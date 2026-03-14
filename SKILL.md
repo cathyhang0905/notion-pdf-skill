@@ -56,5 +56,5 @@ python3 notion_pdf_import.py "~/Downloads/report.pdf" --title "Q1 Report" --stat
 ### Notes
 
 - `UNSPLASH_ACCESS_KEY` is optional — cover image is skipped if not set
-- Large PDFs (>5 MB) are handled by converting to images instead of uploading the raw file
+- All PDFs are converted page-by-page to JPEG (150 DPI, 85% quality), so large PDFs are automatically compressed — a 20 MB PDF typically results in a few MB of images total
 - Each page image is deterministically linked to the title, so re-running produces the same cover/icon
