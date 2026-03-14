@@ -80,7 +80,7 @@ Claude will ask for the file path and run the script automatically.
 ```
 PDF file
   └─ PyMuPDF → JPEG images (150 DPI)
-       └─ imgbb → hosted image URLs
+       └─ Notion file upload API → hosted image URLs
             └─ Notion API → image blocks in new page
                               + Unsplash cover photo
                               + DiceBear icon
@@ -90,7 +90,7 @@ PDF file
 
 - Python 3.9+
 - macOS / Linux / Windows
-- Free API accounts: Notion, imgbb, Unsplash (optional)
+- Free API accounts: Notion, Unsplash (optional)
 
 ## License
 
