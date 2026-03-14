@@ -47,11 +47,11 @@ python3 notion_pdf_import.py "~/Downloads/report.pdf" --title "Q1 Report" --stat
 ### What it does
 
 1. Converts each PDF page to a JPEG image (150 DPI)
-2. Uploads images directly to Notion via file upload API
-3. Fetches a unique cover photo from Unsplash based on the title
-4. Generates a unique icon via DiceBear
-5. Creates a new page in the Notion Articles database
-6. Inserts all page images as image blocks (PPT-style)
+2. Uploads each page image to Notion via file upload API
+3. Creates a new page in your Notion database with title, status, and tags
+4. Sets a unique icon via DiceBear (auto-generated from title)
+5. Sets a cover photo from Unsplash (optional — skipped if `UNSPLASH_ACCESS_KEY` not set)
+6. Inserts all page images as full-width image blocks (PPT-style)
 
 ### Notes
 
