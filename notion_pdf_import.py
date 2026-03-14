@@ -12,15 +12,14 @@ Requirements:
     pip install notion-client requests PyMuPDF python-dotenv
 
 Environment variables (set in .env or shell):
-    NOTION_TOKEN         — Notion integration token
-    NOTION_DATABASE_ID   — Target Articles database ID
-    IMGBB_API_KEY        — imgbb image hosting API key
-    UNSPLASH_ACCESS_KEY  — Unsplash API access key (for cover images)
+    NOTION_TOKEN         — Notion integration token (required)
+    NOTION_DATABASE_ID   — Target Notion database ID (required)
+    UNSPLASH_ACCESS_KEY  — Unsplash API key for cover images (optional)
 """
 
 import argparse
-import base64
 import hashlib
+import io
 import os
 import sys
 import time
@@ -36,8 +35,7 @@ load_dotenv()
 
 NOTION_TOKEN        = os.environ.get("NOTION_TOKEN")
 DATABASE_ID         = os.environ.get("NOTION_DATABASE_ID")
-IMGBB_API_KEY       = os.environ.get("IMGBB_API_KEY")
-UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY")  # optional
 
 IMAGE_DPI    = 150
 JPEG_QUALITY = 85
@@ -63,7 +61,7 @@ VISUAL_QUERIES = [
 
 
 def check_env():
-    missing = [k for k in ["NOTION_TOKEN", "NOTION_DATABASE_ID", "IMGBB_API_KEY"]
+    missing = [k for k in ["NOTION_TOKEN", "NOTION_DATABASE_ID"]
                if not os.environ.get(k)]
     if missing:
         print(f"❌ Missing environment variables: {', '.join(missing)}")
@@ -72,6 +70,7 @@ def check_env():
 
 
 def pdf_to_images(pdf_path: str) -> list:
+    """Convert each PDF page to JPEG bytes."""
     doc = fitz.open(pdf_path)
     images = []
     for page in doc:
@@ -80,18 +79,39 @@ def pdf_to_images(pdf_path: str) -> list:
     return images
 
 
-def upload_to_imgbb(image_bytes: bytes, name: str) -> str:
-    b64 = base64.b64encode(image_bytes).decode()
-    resp = requests.post(
-        "https://api.imgbb.com/1/upload",
-        data={"key": IMGBB_API_KEY, "image": b64, "name": name[:100]},
+def upload_image_to_notion(image_bytes: bytes, filename: str) -> str:
+    """Upload image bytes to Notion file upload API, return file_upload_id."""
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Notion-Version": "2022-06-28",
+    }
+
+    # Step 1: Create upload session
+    r1 = requests.post(
+        "https://api.notion.com/v1/file_uploads",
+        headers={**headers, "Content-Type": "application/json"},
+        json={"filename": filename, "content_type": "image/jpeg"},
+        timeout=15,
+    )
+    r1.raise_for_status()
+    data = r1.json()
+    upload_url = data["upload_url"]
+    file_upload_id = data["id"]
+
+    # Step 2: Upload file bytes
+    r2 = requests.post(
+        upload_url,
+        headers=headers,
+        files={"file": (filename, io.BytesIO(image_bytes), "image/jpeg")},
         timeout=30,
     )
-    resp.raise_for_status()
-    return resp.json()["data"]["url"]
+    r2.raise_for_status()
+
+    return file_upload_id
 
 
 def get_cover_url(title: str) -> str | None:
+    """Fetch a unique cover photo from Unsplash based on title hash."""
     if not UNSPLASH_ACCESS_KEY:
         return None
     h = int(hashlib.md5(title.encode()).hexdigest(), 16)
@@ -114,6 +134,7 @@ def get_cover_url(title: str) -> str | None:
 
 
 def get_icon_url(title: str) -> str:
+    """Generate a unique DiceBear icon URL based on title hash."""
     h = int(hashlib.md5(title.encode()).hexdigest(), 16)
     style = ICON_STYLES[h % len(ICON_STYLES)]
     seed = hashlib.md5((title + "icon").encode()).hexdigest()
@@ -152,14 +173,14 @@ def main():
     images = pdf_to_images(pdf_path)
     print(f"   {len(images)} pages found")
 
-    # Step 2: Upload images
-    print("☁️  [2/4] Uploading images...")
-    image_urls = []
+    # Step 2: Upload images to Notion
+    print("☁️  [2/4] Uploading images to Notion...")
+    file_upload_ids = []
     for i, img_bytes in enumerate(images):
-        url = upload_to_imgbb(img_bytes, f"{title[:50]}_p{i+1}")
-        image_urls.append(url)
+        uid = upload_image_to_notion(img_bytes, f"page_{i+1}.jpg")
+        file_upload_ids.append(uid)
         print(f"   Page {i+1}/{len(images)} ✅")
-        time.sleep(0.3)
+        time.sleep(0.2)
 
     # Step 3: Cover & icon
     print("🎨 [3/4] Fetching cover and icon...")
@@ -191,9 +212,12 @@ def main():
 
     # Insert image blocks (max 50 per request)
     image_blocks = [
-        {"object": "block", "type": "image",
-         "image": {"type": "external", "external": {"url": url}}}
-        for url in image_urls
+        {
+            "object": "block",
+            "type": "image",
+            "image": {"type": "file_upload", "file_upload": {"id": uid}},
+        }
+        for uid in file_upload_ids
     ]
     for i in range(0, len(image_blocks), 50):
         notion.blocks.children.append(
